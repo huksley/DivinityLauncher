@@ -12,6 +12,9 @@
 #include <dlfcn.h>
 #include <GL/gl.h>
 #include <string.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <sys/stat.h>
 
 #define _GLX_PUBLIC
 
@@ -47,4 +50,56 @@ _GLX_PUBLIC void (*glXGetProcAddressARB(const GLubyte * procName)) (void)
    if(!next)
 	next = dlsym(RTLD_NEXT, "glXGetProcAddressARB");
     return ((_GLX_PUBLIC void (*(*)(const GLubyte *))(void))next)(procName);
+}
+
+char* mangle_if_needed(const char* op, const char* pathname) {
+	static char* mangled = NULL;
+	static char* pos = NULL;
+	
+	pos = strstr(pathname, "/Larian Studios/");
+    if (pos != NULL) {
+	    mangled = calloc(strlen(pathname) + strlen("/.local/share"), sizeof(char*));
+	    mangled = strncat(mangled, pathname, pos - pathname);
+	    mangled = strcat(mangled, "/.local/share");
+	    mangled = strcat(mangled, pos);
+	    printf("%s: Rewriting path %s to %s\n", op, pathname, mangled);
+	}
+	
+	return mangled;
+}
+
+FILE* fopen(const char *pathname, const char *mode) {
+	static void* next = NULL;
+	static char* mangled = NULL;
+	static FILE* result = NULL;
+	
+	next = dlsym(RTLD_NEXT, "fopen");
+	mangled = mangle_if_needed("fopen", pathname);
+	result = ((FILE* (*)(const char*, const char*))next)(pathname, mode);
+	
+	if (mangled != NULL) {
+	    //free(mangled);
+	}
+	
+	return result;
+}
+
+int stat(const char *pathname, struct stat *statbuf) {
+    static void* next = NULL;
+    static char* mangled = NULL;
+    static int result = 0;
+    printf("HERE: %s\n", pathname);
+    next = dlsym(RTLD_NEXT, "stat");
+    mangled = mangle_if_needed("stat", pathname);
+    result = ((int (*)(const char*, struct stat*))next)(pathname, statbuf);
+    return result;
+}
+
+char *getenv(const char* name) {
+    static void* next = NULL;
+    static char* result = 0;
+    next = dlsym(RTLD_NEXT, "getenv");
+    printf("getenv: %s\n", name);
+    result = ((char* (*)(const char*))next)(name);
+    return result;
 }
